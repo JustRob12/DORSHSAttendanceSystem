@@ -74,14 +74,8 @@ export default function RegisterPage() {
                     <div style={{ position: "absolute", bottom: "-80px", left: "-40px", width: "260px", height: "260px", borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
 
                     <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
-                        <div style={{
-                            display: "inline-flex", alignItems: "center", justifyContent: "center",
-                            width: 88, height: 88, borderRadius: "20px",
-                            background: "rgba(255,255,255,0.12)",
-                            border: "1px solid rgba(255,255,255,0.2)",
-                            marginBottom: "1.5rem",
-                        }}>
-                            <Image src="/images/logo/DORSHS.png" alt="DORSHS Logo" width={64} height={64} style={{ borderRadius: "12px" }} priority />
+                        <div style={{ marginBottom: "1.5rem", display: "flex", justifyContent: "center" }}>
+                            <Image src="/images/logo/DORSHS.png" alt="DORSHS Logo" width={150} height={150} priority />
                         </div>
 
                         <h1 style={{ fontSize: "1.875rem", fontWeight: 700, color: "#ffffff", letterSpacing: "-0.03em", marginBottom: "0.5rem" }}>
@@ -205,7 +199,23 @@ export default function RegisterPage() {
                                 </div>
                                 <div>
                                     <label style={labelStyle}>LRN <span style={{ color: "#ef4444" }}>*</span></label>
-                                    <input type="text" className="sc-input" placeholder="12-digit Learner Reference Number" required maxLength={12} />
+                                    <input
+                                        type="tel"
+                                        inputMode="numeric"
+                                        pattern="\d{12}"
+                                        className="sc-input"
+                                        placeholder="12-digit Learner Reference Number"
+                                        required
+                                        maxLength={12}
+                                        onKeyDown={e => {
+                                            const allowed = ["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Tab", "Enter"];
+                                            if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) e.preventDefault();
+                                        }}
+                                        onPaste={e => {
+                                            const text = e.clipboardData.getData("text");
+                                            if (!/^\d+$/.test(text)) e.preventDefault();
+                                        }}
+                                    />
                                 </div>
                             </>
                         )}
