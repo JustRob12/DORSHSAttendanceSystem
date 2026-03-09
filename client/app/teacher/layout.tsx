@@ -4,14 +4,31 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 interface UserSession {
     id: number;
     username: string;
     role: string;
+    teacherId?: string;
 }
 
-// Sub-nav icon helper
+// ── Icons ─────────────────────────────────────────────────────────────────
+const DashboardIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></svg>
+);
+const ScanIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="1" /></svg>
+);
+const LibraryIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 6 4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" /></svg>
+);
+const UserIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+);
+const AttendanceIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+);
 const Icon = ({ d }: { d: string }) => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d={d} />
@@ -24,52 +41,49 @@ const NAV: {
     icon: React.ReactNode;
     children?: { label: string; href: string }[];
 }[] = [
+        { label: "Dashboard", href: "/teacher/dashboard", icon: <DashboardIcon /> },
         {
-            label: "Dashboard",
-            href: "/admin/dashboard",
-            icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>,
-        },
-        {
-            label: "Students",
-            icon: <Icon d="M22 10v6M2 10l10-5 10 5-10 5z M6 12v5c3 3 9 3 12 0v-5" />,
+            label: "Attendance",
+            icon: <AttendanceIcon />,
             children: [
-                { label: "Register Student", href: "/admin/register-student" },
-                { label: "View Students", href: "/admin/view-students" },
+                { label: "Scan", href: "/teacher/scan-attendance" },
+                { label: "Records", href: "/teacher/attendance/records" },
             ],
         },
-        {
-            label: "Teacher",
-            icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="16" y1="11" x2="22" y2="11" /></svg>,
-            children: [
-                { label: "Register Teacher", href: "/admin/register-teacher" },
-                { label: "View Teachers", href: "/admin/view-teachers" },
-            ],
-        },
-        {
-            label: "Subject",
-            icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>,
-            children: [
-                { label: "Add Subject", href: "/admin/add-subject" },
-                { label: "Assigned Subject", href: "/admin/assigned-subject" },
-            ],
-        },
+        { label: "My Subjects", href: "/teacher/my-subjects", icon: <LibraryIcon /> },
+        { label: "Profile", href: "/teacher/profile", icon: <UserIcon /> },
     ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function TeacherLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
-    const [user, setUser] = useState<UserSession | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isMobile, setIsMobile] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
-
-    // Track which parent groups are expanded
-    const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
-        return { Students: true, Teacher: true, Subject: true };
-    });
+    const [user, setUser] = useState<UserSession | null>(null);
+    const [profilePic, setProfilePic] = useState<string | null>(null);
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({ Attendance: true });
 
     useEffect(() => {
+        const raw = sessionStorage.getItem("user");
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            setUser(parsed);
+
+            if (parsed.teacherId) {
+                supabase
+                    .from("teacher")
+                    .select("profile_picture")
+                    .eq("teacher_id", parsed.teacherId)
+                    .single()
+                    .then(({ data, error }) => {
+                        if (!error && data?.profile_picture) {
+                            setProfilePic(data.profile_picture);
+                        }
+                    });
+            }
+        }
         setIsMounted(true);
         const handleResize = () => {
             const mobile = window.innerWidth < 768;
@@ -77,42 +91,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             if (mobile) setSidebarOpen(false);
             else setSidebarOpen(true);
         };
-        handleResize(); // Initial check
+        handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    useEffect(() => {
-        const raw = sessionStorage.getItem("user");
-        if (!raw) { router.push("/login"); return; }
-        const parsed = JSON.parse(raw);
-        if (parsed.role !== "admin") { router.push("/login"); return; }
-        setUser(parsed);
-    }, [router]);
-
     const handleLogout = () => {
-        sessionStorage.removeItem("user");
         router.push("/login");
     };
 
-    if (!isMounted || !user) return null;
+    if (!isMounted) return null;
 
-    const toggleGroup = (label: string) => {
-        setExpanded(prev => ({ ...prev, [label]: !prev[label] }));
-    };
-
-    const isActive = (href: string) => pathname === href;
-    const isGroupActive = (children: { href: string }[]) => children.some(c => pathname === c.href);
+    const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+    const isGroupActive = (children: { href: string }[]) => children.some(c => pathname === c.href || pathname.startsWith(c.href + "/"));
+    const toggleGroup = (label: string) => setExpanded(prev => ({ ...prev, [label]: !prev[label] }));
 
     return (
         <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", fontFamily: "Inter, sans-serif", background: "#f9fafb" }}>
-
             {/* ── HEADER ── */}
             <header style={{
-                position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
-                height: "60px", background: "#ffffff", borderBottom: "1px solid #e5e5e5",
+                position: "fixed", top: 0, left: 0, right: 0, height: "60px",
+                background: "white", borderBottom: "1px solid #e5e5e5",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "0 1.5rem",
+                padding: "0 1.5rem", zIndex: 50
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
                     <button
@@ -125,7 +126,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </button>
                     <Image src="/images/logo/DORSHS.png" alt="DORSHS Logo" width={32} height={32} style={{ borderRadius: "6px" }} />
                     <span style={{ fontWeight: 600, color: "#0a0a0a", fontSize: "0.9375rem" }}>SciTrack</span>
-                    <span style={{ fontSize: "0.6875rem", fontWeight: 500, color: "#16a34a", background: "#dcfce7", padding: "2px 8px", borderRadius: "20px" }}>Admin</span>
+                    <span style={{ fontSize: "0.6875rem", fontWeight: 500, color: "#16a34a", background: "#dcfce7", padding: "2px 8px", borderRadius: "20px" }}>Teacher</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
                     <div style={{ position: "relative" }}>
@@ -133,13 +134,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             onClick={() => setDropdownOpen(!dropdownOpen)}
                             style={{
                                 width: "36px", height: "36px", borderRadius: "50%", background: "#f3f4f6",
-                                border: "1px solid #e5e5e5", display: "flex", alignItems: "center", justifyContent: "center",
-                                cursor: "pointer", color: "#525252", padding: 0, transition: "background 0.2s"
+                                border: profilePic ? "none" : "1px solid #e5e5e5", display: "flex", alignItems: "center", justifyContent: "center",
+                                cursor: "pointer", color: "#525252", padding: 0, transition: "background 0.2s", overflow: "hidden"
                             }}
                             onMouseEnter={e => e.currentTarget.style.background = "#e5e7eb"}
                             onMouseLeave={e => e.currentTarget.style.background = "#f3f4f6"}
                         >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                            {profilePic ? (
+                                <img src={profilePic} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (
+                                <UserIcon />
+                            )}
                         </button>
 
                         {dropdownOpen && (
@@ -153,13 +158,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                 }}>
                                     <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid #f5f5f5", display: "flex", flexDirection: "column" }}>
                                         <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#0a0a0a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                            {user.username}
+                                            {user ? user.username : "Teacher"}
                                         </p>
                                         <p style={{ margin: 0, fontSize: "0.75rem", color: "#737373", marginTop: "2px", textTransform: "capitalize" }}>
-                                            {user.role}
+                                            {user ? user.role : "Teacher"}
                                         </p>
                                     </div>
                                     <div style={{ padding: "0.375rem" }}>
+                                        <Link href="/teacher/profile" onClick={() => setDropdownOpen(false)} style={{
+                                            width: "100%", textAlign: "left", padding: "0.5rem 0.625rem",
+                                            background: "transparent", border: "none", borderRadius: "4px",
+                                            fontSize: "0.875rem", color: "#0a0a0a", cursor: "pointer",
+                                            display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none"
+                                        }} onMouseEnter={e => e.currentTarget.style.background = "#f5f5f5"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                                            <UserIcon />
+                                            Profile
+                                        </Link>
+                                    </div>
+                                    <div style={{ padding: "0.375rem", borderTop: "1px solid #f5f5f5" }}>
                                         <button onClick={handleLogout} style={{
                                             width: "100%", textAlign: "left", padding: "0.5rem 0.625rem",
                                             background: "transparent", border: "none", borderRadius: "4px",
@@ -201,13 +217,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     transition: "transform 0.3s ease",
                     zIndex: 40,
                 }}>
-                    <div style={{ padding: "1rem 0", minWidth: "220px", overflowY: "auto", flex: 1 }}>
+                    <div style={{ padding: "1rem 0", overflowY: "auto", flex: 1 }}>
                         <p style={{ fontSize: "0.6875rem", fontWeight: 600, color: "#a3a3a3", textTransform: "uppercase", letterSpacing: "0.08em", padding: "0 1rem 0.5rem" }}>
                             Navigation
                         </p>
                         <nav style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                             {NAV.map(item => {
-                                // ── Simple link (no children)
                                 if (!item.children) {
                                     const active = isActive(item.href!);
                                     return (
@@ -230,13 +245,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                     );
                                 }
 
-                                // ── Group with sub-nav
                                 const groupActive = isGroupActive(item.children);
                                 const open = expanded[item.label] ?? groupActive;
 
                                 return (
                                     <div key={item.label}>
-                                        {/* Group header */}
                                         <button
                                             onClick={() => toggleGroup(item.label)}
                                             style={{
@@ -261,11 +274,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                             </svg>
                                         </button>
 
-                                        {/* Sub-items */}
                                         {open && (
                                             <div style={{ paddingLeft: "1rem" }}>
                                                 {item.children.map(child => {
-                                                    const childActive = isActive(child.href);
+                                                    const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
                                                     return (
                                                         <Link key={child.href} href={child.href}
                                                             onClick={() => { if (isMobile) setSidebarOpen(false); }}
@@ -282,7 +294,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                                             onMouseEnter={e => { if (!childActive) e.currentTarget.style.background = "#f5f5f5"; }}
                                                             onMouseLeave={e => { if (!childActive) e.currentTarget.style.background = "transparent"; }}
                                                         >
-                                                            <span style={{ width: 4, height: 4, borderRadius: "50%", background: childActive ? "#16a34a" : "#d4d4d4", flexShrink: 0 }} />
+                                                            <span style={{ width: 4, height: 4, borderRadius: "50%", background: childActive ? "#16a34a" : "#d4d4d4", flexShrink: 0, display: "inline-block" }} />
                                                             {child.label}
                                                         </Link>
                                                     );
@@ -295,7 +307,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         </nav>
                     </div>
 
-                    <div style={{ marginTop: "auto", padding: "1rem", borderTop: "1px solid #e5e5e5", minWidth: "220px" }}>
+                    <div style={{ marginTop: "auto", padding: "1rem", borderTop: "1px solid #e5e5e5" }}>
                         <p style={{ fontSize: "0.6875rem", color: "#a3a3a3", textAlign: "center" }}>© 2026 DORSHS</p>
                     </div>
                 </aside>

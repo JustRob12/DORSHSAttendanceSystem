@@ -4,20 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import { decryptPassword } from "@/lib/crypto";
 import { supabase } from "@/lib/supabase";
 
-interface Student {
-    student_id: number;
+interface Teacher {
+    teacher_id: number;
     firstname: string;
     lastname: string;
     middlename: string | null;
-    lrn: number;
-    grade: number;
-    section: string | null;
-    gender: string | null;
-    account_students: { username: string; password: string }[] | null;
+    gender: string;
+    email: string | null;
+    account_teacher: { username: string; password: string }[] | null;
 }
 
-const GRADES = [7, 8, 9, 10, 11, 12];
-
+// ── Icon components ────────────────────────────────────────────────────────────
 const SendIcon = () => (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -38,99 +35,88 @@ const TrashIcon = () => (
     </svg>
 );
 
-export default function ViewStudentsPage() {
-    const [students, setStudents] = useState<Student[]>([]);
+export default function ViewTeachersPage() {
+    const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [filterGrade, setFilterGrade] = useState("");
-    const [filterSection, setFilterSection] = useState("");
-    const [filterGender, setFilterGender] = useState("");
     const [search, setSearch] = useState("");
-    const [sections, setSections] = useState<string[]>([]);
+    const [filterGender, setFilterGender] = useState("");
 
     // ── Delete modal
-    const [deleteModal, setDeleteModal] = useState<{ open: boolean; student: Student | null; loading: boolean }>({ open: false, student: null, loading: false });
+    const [deleteModal, setDeleteModal] = useState<{ open: boolean; teacher: Teacher | null; loading: boolean }>({ open: false, teacher: null, loading: false });
 
     // ── Edit modal
     const [editModal, setEditModal] = useState<{
-        open: boolean; student: Student | null; loading: boolean;
-        firstName: string; lastName: string; middleName: string;
-        grade: string; section: string; gender: string;
-    }>({ open: false, student: null, loading: false, firstName: "", lastName: "", middleName: "", grade: "", section: "", gender: "" });
+        open: boolean; teacher: Teacher | null; loading: boolean;
+        firstName: string; lastName: string; middleName: string; gender: string; email: string;
+    }>({ open: false, teacher: null, loading: false, firstName: "", lastName: "", middleName: "", gender: "", email: "" });
 
-    // open default mail client with pre-filled credentials
+    // ── Send credentials via mailto
     const sendCredentials = (email: string, username: string, encryptedPw: string) => {
         const plain = decryptPassword(encryptedPw);
-        const subject = encodeURIComponent("Your SciTrack Login Credentials");
+        const subject = encodeURIComponent("Your DORSHS Attendance System Login Credentials");
         const body = encodeURIComponent(
-            `Dear Student,\n\nHere are your login credentials for the SciTrack – DORSHS Attendance System:\n\n  Username: ${username}\n  Password: ${plain}\n\nPlease keep these credentials safe and do not share them with anyone.\n\nBest regards,\nDORSHS Admin`
+            `Dear Teacher,\n\nHere are your login credentials for the DORSHS Attendance System:\n\n  Username: ${username}\n  Password: ${plain}\n\nPlease keep these credentials safe and do not share them with anyone.\n\nBest regards,\nDORSHS Admin`
         );
         window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
     };
 
-    const loadStudents = useCallback(async () => {
+    const loadTeachers = useCallback(async () => {
         setIsLoading(true);
         let q = supabase
-            .from("students")
-            .select("student_id, firstname, lastname, middlename, lrn, grade, section, gender, account_students(username, password)")
+            .from("teacher")
+            .select("teacher_id, firstname, lastname, middlename, gender, email, account_teacher(username, password)")
             .order("lastname", { ascending: true })
             .order("firstname", { ascending: true });
-
-        if (filterGrade) q = q.eq("grade", parseInt(filterGrade));
-        if (filterSection) q = q.ilike("section", filterSection);
         if (filterGender) q = q.ilike("gender", filterGender);
-
         const { data } = await q;
-        setStudents((data as Student[]) ?? []);
+        setTeachers((data as Teacher[]) ?? []);
         setIsLoading(false);
-    }, [filterGrade, filterSection, filterGender]);
+    }, [filterGender]);
 
-    useEffect(() => {
-        supabase.from("students").select("section").then(({ data }) => {
-            const unique = [...new Set((data ?? []).map(s => s.section).filter(Boolean))] as string[];
-            setSections(unique.sort());
-        });
-    }, []);
+    useEffect(() => { loadTeachers(); }, [loadTeachers]);
 
-    useEffect(() => { loadStudents(); }, [loadStudents]);
+    const displayed = teachers.filter(t => {
+        if (!search.trim()) return true;
+        const q = search.toLowerCase();
+        return t.firstname.toLowerCase().includes(q) ||
+            t.lastname.toLowerCase().includes(q) ||
+            (t.email ?? "").toLowerCase().includes(q);
+    });
 
-    // ── Delete student (cascade: account_students then students)
+    // ── Delete (cascade handled by FK on delete cascade)
     const handleDelete = async () => {
-        if (!deleteModal.student) return;
+        if (!deleteModal.teacher) return;
         setDeleteModal(m => ({ ...m, loading: true }));
-        const id = deleteModal.student.student_id;
-        await supabase.from("account_students").delete().eq("student_id", id);
-        await supabase.from("students").delete().eq("student_id", id);
-        setDeleteModal({ open: false, student: null, loading: false });
-        loadStudents();
+        await supabase.from("teacher").delete().eq("teacher_id", deleteModal.teacher.teacher_id);
+        setDeleteModal({ open: false, teacher: null, loading: false });
+        loadTeachers();
     };
 
     // ── Open edit
-    const openEdit = (s: Student) => {
-        setEditModal({ open: true, student: s, loading: false, firstName: s.firstname, lastName: s.lastname, middleName: s.middlename ?? "", grade: String(s.grade), section: s.section ?? "", gender: s.gender ?? "" });
+    const openEdit = (t: Teacher) => {
+        setEditModal({
+            open: true, teacher: t, loading: false,
+            firstName: t.firstname, lastName: t.lastname,
+            middleName: t.middlename ?? "", gender: t.gender, email: t.email ?? "",
+        });
     };
 
     // ── Save edit
     const handleEdit = async () => {
-        if (!editModal.student) return;
+        if (!editModal.teacher) return;
         setEditModal(m => ({ ...m, loading: true }));
-        await supabase.from("students").update({
+        await supabase.from("teacher").update({
             firstname: editModal.firstName.trim(),
             lastname: editModal.lastName.trim(),
             middlename: editModal.middleName.trim() || null,
-            grade: parseInt(editModal.grade),
-            section: editModal.section.trim() || null,
-            gender: editModal.gender || null,
-        }).eq("student_id", editModal.student.student_id);
+            gender: editModal.gender,
+            email: editModal.email.trim() || null,
+        }).eq("teacher_id", editModal.teacher.teacher_id);
         setEditModal(m => ({ ...m, open: false, loading: false }));
-        loadStudents();
+        loadTeachers();
     };
 
-    const displayed = students.filter(s => {
-        if (!search.trim()) return true;
-        const q = search.toLowerCase();
-        return s.firstname.toLowerCase().includes(q) || s.lastname.toLowerCase().includes(q) || String(s.lrn).includes(q);
-    });
-
+    // ── Styles
     const selectStyle: React.CSSProperties = {
         padding: "0.4375rem 0.75rem", borderRadius: "8px",
         border: "1px solid #e5e5e5", fontSize: "0.8125rem",
@@ -147,13 +133,18 @@ export default function ViewStudentsPage() {
         padding: "0.625rem 0.875rem", fontSize: "0.875rem", color: "#0a0a0a",
         borderBottom: "1px solid #f5f5f5", whiteSpace: "nowrap",
     };
+    const inputStyle: React.CSSProperties = {
+        width: "100%", padding: "0.5625rem 0.75rem", borderRadius: "8px",
+        border: "1px solid #e5e5e5", fontSize: "0.875rem", color: "#0a0a0a",
+        background: "#fff", outline: "none", boxSizing: "border-box",
+        fontFamily: "Inter, sans-serif",
+    };
 
     return (
         <div className="p-4 md:p-8" style={{ fontFamily: "Inter, sans-serif" }}>
-
             <div style={{ marginBottom: "1.5rem" }}>
-                <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0a0a0a", letterSpacing: "-0.02em" }}>View Students</h1>
-                <p style={{ fontSize: "0.875rem", color: "#737373", marginTop: "4px" }}>Browse, filter, and send login credentials to students.</p>
+                <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0a0a0a", letterSpacing: "-0.02em" }}>View Teachers</h1>
+                <p style={{ fontSize: "0.875rem", color: "#737373", marginTop: "4px" }}>Browse, search, edit and delete teacher records.</p>
             </div>
 
             {/* Filter bar */}
@@ -164,19 +155,9 @@ export default function ViewStudentsPage() {
                         <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
                     </svg>
                     <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                        placeholder="Search name or LRN…"
+                        placeholder="Search name or email…"
                         style={{ ...selectStyle, paddingLeft: "2rem", width: "100%", boxSizing: "border-box", cursor: "text" }} />
                 </div>
-
-                <select style={selectStyle} value={filterGrade} onChange={e => setFilterGrade(e.target.value)}>
-                    <option value="">All Grades</option>
-                    {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
-                </select>
-
-                <select style={selectStyle} value={filterSection} onChange={e => setFilterSection(e.target.value)}>
-                    <option value="">All Sections</option>
-                    {sections.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
 
                 <select style={selectStyle} value={filterGender} onChange={e => setFilterGender(e.target.value)}>
                     <option value="">All Genders</option>
@@ -184,28 +165,29 @@ export default function ViewStudentsPage() {
                     <option value="Female">Female</option>
                 </select>
 
-                <button onClick={() => { setFilterGrade(""); setFilterSection(""); setFilterGender(""); setSearch(""); }}
+                <button onClick={() => { setFilterGender(""); setSearch(""); }}
                     style={{ ...selectStyle, background: "#f5f5f5", color: "#737373" }}>
                     Clear
                 </button>
 
                 <span style={{ marginLeft: "auto", fontSize: "0.8125rem", color: "#737373" }}>
-                    {isLoading ? "Loading…" : `${displayed.length} student${displayed.length !== 1 ? "s" : ""}`}
+                    {isLoading ? "Loading…" : `${displayed.length} teacher${displayed.length !== 1 ? "s" : ""}`}
                 </span>
             </div>
 
             {/* Table */}
             <div style={{ background: "white", border: "1px solid #e5e5e5", borderRadius: "12px", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                 {isLoading ? (
-                    <div style={{ padding: "3rem", textAlign: "center", color: "#a3a3a3" }}>Loading students…</div>
+                    <div style={{ padding: "3rem", textAlign: "center", color: "#a3a3a3" }}>Loading teachers…</div>
                 ) : displayed.length === 0 ? (
                     <div style={{ padding: "3rem", textAlign: "center" }}>
                         <div style={{ width: "48px", height: "48px", background: "#f5f5f5", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.75rem" }}>
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M22 10v6M2 10l10-5 10 5-10 5z M6 12v5c3 3 9 3 12 0v-5" />
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                                <line x1="19" y1="8" x2="19" y2="14" /><line x1="16" y1="11" x2="22" y2="11" />
                             </svg>
                         </div>
-                        <p style={{ fontSize: "0.9375rem", color: "#a3a3a3", fontWeight: 500 }}>No students found</p>
+                        <p style={{ fontSize: "0.9375rem", color: "#a3a3a3", fontWeight: 500 }}>No teachers found</p>
                         <p style={{ fontSize: "0.8125rem", color: "#d4d4d4", marginTop: "4px" }}>Try adjusting your filters</p>
                     </div>
                 ) : (
@@ -214,59 +196,49 @@ export default function ViewStudentsPage() {
                             <thead>
                                 <tr>
                                     <th style={th}>#</th>
-                                    <th style={th}>LRN</th>
                                     <th style={th}>Last Name</th>
                                     <th style={th}>First Name</th>
                                     <th style={th}>Middle Name</th>
                                     <th style={th}>Gender</th>
-                                    <th style={th}>Grade</th>
-                                    <th style={th}>Section</th>
-                                    <th style={th}>Username (Email)</th>
+                                    <th style={th}>Email</th>
                                     <th style={th}>Send Credentials</th>
                                     <th style={{ ...th, textAlign: "center" }}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {displayed.map((s, i) => {
-                                    const account = s.account_students?.[0];
+                                {displayed.map((t, i) => {
+                                    const account = t.account_teacher?.[0];
                                     return (
-                                        <tr key={s.student_id}
+                                        <tr key={t.teacher_id}
                                             style={{ background: i % 2 === 0 ? "#fff" : "#fafafa", transition: "background 0.1s" }}
                                             onMouseEnter={e => (e.currentTarget.style.background = "#f0fdf4")}
                                             onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafafa")}
                                         >
                                             <td style={{ ...td, color: "#a3a3a3", fontSize: "0.75rem" }}>{i + 1}</td>
-                                            <td style={td}><code style={{ fontSize: "0.75rem", color: "#525252" }}>{s.lrn}</code></td>
-                                            <td style={{ ...td, fontWeight: 500 }}>{s.lastname}</td>
-                                            <td style={td}>{s.firstname}</td>
-                                            <td style={{ ...td, color: "#737373" }}>{s.middlename || "—"}</td>
+                                            <td style={{ ...td, fontWeight: 500 }}>{t.lastname}</td>
+                                            <td style={td}>{t.firstname}</td>
+                                            <td style={{ ...td, color: "#737373" }}>{t.middlename || "—"}</td>
                                             <td style={td}>
-                                                {s.gender ? (
+                                                {t.gender ? (
                                                     <span style={{
                                                         fontSize: "0.75rem", fontWeight: 500, padding: "2px 8px", borderRadius: "20px",
-                                                        background: s.gender.toLowerCase() === "male" ? "#dbeafe" : "#fce7f3",
-                                                        color: s.gender.toLowerCase() === "male" ? "#1d4ed8" : "#be185d",
-                                                    }}>{s.gender}</span>
+                                                        background: t.gender.toLowerCase() === "male" ? "#dbeafe" : "#fce7f3",
+                                                        color: t.gender.toLowerCase() === "male" ? "#1d4ed8" : "#be185d",
+                                                    }}>{t.gender}</span>
                                                 ) : "—"}
                                             </td>
-                                            <td style={td}>
-                                                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#16a34a", background: "#dcfce7", padding: "2px 8px", borderRadius: "20px" }}>
-                                                    Grade {s.grade}
-                                                </span>
-                                            </td>
-                                            <td style={td}>{s.section || "—"}</td>
 
-                                            {/* Username */}
+                                            {/* Email */}
                                             <td style={{ ...td, color: "#2563eb", fontSize: "0.8125rem" }}>
-                                                {account?.username ?? <span style={{ color: "#d4d4d4" }}>—</span>}
+                                                {t.email ?? <span style={{ color: "#d4d4d4" }}>—</span>}
                                             </td>
 
-                                            {/* Send credentials button */}
+                                            {/* Send Credentials */}
                                             <td style={td}>
-                                                {account ? (
+                                                {account && t.email ? (
                                                     <button
-                                                        onClick={() => sendCredentials(account.username, account.username, account.password)}
-                                                        title={`Send credentials to ${account.username}`}
+                                                        onClick={() => sendCredentials(t.email!, account.username, account.password)}
+                                                        title={`Send credentials to ${t.email}`}
                                                         style={{
                                                             display: "inline-flex", alignItems: "center", gap: "0.375rem",
                                                             padding: "0.3125rem 0.75rem", borderRadius: "6px",
@@ -287,18 +259,30 @@ export default function ViewStudentsPage() {
                                             <td style={{ ...td, textAlign: "center" }}>
                                                 <div style={{ display: "inline-flex", gap: "0.375rem" }}>
                                                     <button
-                                                        onClick={() => openEdit(s)}
-                                                        title="Edit student"
-                                                        style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", padding: "0.3rem 0.625rem", borderRadius: "6px", background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "opacity 0.15s" }}
+                                                        onClick={() => openEdit(t)}
+                                                        title="Edit teacher"
+                                                        style={{
+                                                            display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                                                            padding: "0.3rem 0.625rem", borderRadius: "6px",
+                                                            background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe",
+                                                            fontSize: "0.75rem", fontWeight: 500, cursor: "pointer",
+                                                            fontFamily: "Inter, sans-serif", transition: "opacity 0.15s",
+                                                        }}
                                                         onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
                                                         onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                                                     >
                                                         <PencilIcon /> Edit
                                                     </button>
                                                     <button
-                                                        onClick={() => setDeleteModal({ open: true, student: s, loading: false })}
-                                                        title="Delete student"
-                                                        style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", padding: "0.3rem 0.625rem", borderRadius: "6px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "opacity 0.15s" }}
+                                                        onClick={() => setDeleteModal({ open: true, teacher: t, loading: false })}
+                                                        title="Delete teacher"
+                                                        style={{
+                                                            display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                                                            padding: "0.3rem 0.625rem", borderRadius: "6px",
+                                                            background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca",
+                                                            fontSize: "0.75rem", fontWeight: 500, cursor: "pointer",
+                                                            fontFamily: "Inter, sans-serif", transition: "opacity 0.15s",
+                                                        }}
                                                         onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
                                                         onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                                                     >
@@ -324,22 +308,25 @@ export default function ViewStudentsPage() {
                                 <TrashIcon />
                             </div>
                             <div>
-                                <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#0a0a0a" }}>Delete Student</h2>
+                                <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#0a0a0a" }}>Delete Teacher</h2>
                                 <p style={{ fontSize: "0.8125rem", color: "#737373", marginTop: "2px" }}>This action cannot be undone.</p>
                             </div>
                         </div>
                         <div style={{ padding: "1.25rem 1.5rem" }}>
-                            <p style={{ fontSize: "0.9375rem", color: "#0a0a0a" }}>Are you sure you want to delete <strong>{deleteModal.student?.firstname} {deleteModal.student?.lastname}</strong>?</p>
+                            <p style={{ fontSize: "0.9375rem", color: "#0a0a0a" }}>
+                                Are you sure you want to delete <strong>{deleteModal.teacher?.firstname} {deleteModal.teacher?.lastname}</strong>?
+                            </p>
                             <p style={{ fontSize: "0.8125rem", color: "#737373", marginTop: "4px" }}>Their account credentials will also be removed.</p>
                         </div>
                         <div style={{ padding: "1rem 1.5rem", borderTop: "1px solid #e5e5e5", display: "flex", gap: "0.625rem", justifyContent: "flex-end" }}>
-                            <button onClick={() => setDeleteModal({ open: false, student: null, loading: false })} disabled={deleteModal.loading}
+                            <button onClick={() => setDeleteModal({ open: false, teacher: null, loading: false })}
+                                disabled={deleteModal.loading}
                                 style={{ padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid #e5e5e5", background: "white", fontSize: "0.875rem", color: "#0a0a0a", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
                                 Cancel
                             </button>
                             <button onClick={handleDelete} disabled={deleteModal.loading}
                                 style={{ padding: "0.5rem 1rem", borderRadius: "8px", background: "#dc2626", color: "white", border: "none", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif", opacity: deleteModal.loading ? 0.6 : 1 }}>
-                                {deleteModal.loading ? "Deleting…" : "Delete Student"}
+                                {deleteModal.loading ? "Deleting…" : "Delete Teacher"}
                             </button>
                         </div>
                     </div>
@@ -349,57 +336,47 @@ export default function ViewStudentsPage() {
             {/* ── EDIT MODAL ── */}
             {editModal.open && (
                 <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-                    <div style={{ background: "white", borderRadius: "14px", width: "90%", maxWidth: "520px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+                    <div style={{ background: "white", borderRadius: "14px", width: "90%", maxWidth: "480px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden" }}>
                         <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid #e5e5e5", display: "flex", alignItems: "center", gap: "0.625rem" }}>
                             <div style={{ width: "32px", height: "32px", background: "#eff6ff", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#2563eb" }}>
                                 <PencilIcon />
                             </div>
-                            <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#0a0a0a" }}>Edit Student</h2>
+                            <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#0a0a0a" }}>Edit Teacher</h2>
                         </div>
                         <div style={{ padding: "1.25rem 1.5rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>First Name</label>
-                                    <input value={editModal.firstName} onChange={e => setEditModal(m => ({ ...m, firstName: e.target.value }))}
-                                        style={{ width: "100%", padding: "0.5625rem 0.75rem", borderRadius: "8px", border: "1px solid #e5e5e5", fontSize: "0.875rem", color: "#0a0a0a", background: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "Inter, sans-serif" }} />
+                                    <input value={editModal.firstName} onChange={e => setEditModal(m => ({ ...m, firstName: e.target.value }))} style={inputStyle} />
                                 </div>
                                 <div>
                                     <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Last Name</label>
-                                    <input value={editModal.lastName} onChange={e => setEditModal(m => ({ ...m, lastName: e.target.value }))}
-                                        style={{ width: "100%", padding: "0.5625rem 0.75rem", borderRadius: "8px", border: "1px solid #e5e5e5", fontSize: "0.875rem", color: "#0a0a0a", background: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "Inter, sans-serif" }} />
+                                    <input value={editModal.lastName} onChange={e => setEditModal(m => ({ ...m, lastName: e.target.value }))} style={inputStyle} />
                                 </div>
                             </div>
                             <div>
                                 <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Middle Name</label>
-                                <input value={editModal.middleName} onChange={e => setEditModal(m => ({ ...m, middleName: e.target.value }))} placeholder="Optional"
-                                    style={{ width: "100%", padding: "0.5625rem 0.75rem", borderRadius: "8px", border: "1px solid #e5e5e5", fontSize: "0.875rem", color: "#0a0a0a", background: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "Inter, sans-serif" }} />
+                                <input value={editModal.middleName} onChange={e => setEditModal(m => ({ ...m, middleName: e.target.value }))} style={inputStyle} placeholder="Optional" />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                    <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Grade</label>
-                                    <select value={editModal.grade} onChange={e => setEditModal(m => ({ ...m, grade: e.target.value }))}
-                                        style={{ width: "100%", padding: "0.5625rem 0.75rem", borderRadius: "8px", border: "1px solid #e5e5e5", fontSize: "0.875rem", color: "#0a0a0a", background: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "Inter, sans-serif", cursor: "pointer" }}>
-                                        {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Section</label>
-                                    <input value={editModal.section} onChange={e => setEditModal(m => ({ ...m, section: e.target.value }))} placeholder="e.g. Narra"
-                                        style={{ width: "100%", padding: "0.5625rem 0.75rem", borderRadius: "8px", border: "1px solid #e5e5e5", fontSize: "0.875rem", color: "#0a0a0a", background: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "Inter, sans-serif" }} />
-                                </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Gender</label>
                                     <select value={editModal.gender} onChange={e => setEditModal(m => ({ ...m, gender: e.target.value }))}
-                                        style={{ width: "100%", padding: "0.5625rem 0.75rem", borderRadius: "8px", border: "1px solid #e5e5e5", fontSize: "0.875rem", color: "#0a0a0a", background: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "Inter, sans-serif", cursor: "pointer" }}>
-                                        <option value="">—</option>
+                                        style={{ ...inputStyle, cursor: "pointer" }}>
                                         <option value="Male">Male</option>
                                         <option value="Female">Female</option>
+                                        <option value="Other">Other</option>
                                     </select>
+                                </div>
+                                <div>
+                                    <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Email</label>
+                                    <input value={editModal.email} onChange={e => setEditModal(m => ({ ...m, email: e.target.value }))} style={inputStyle} placeholder="Optional" type="email" />
                                 </div>
                             </div>
                         </div>
                         <div style={{ padding: "1rem 1.5rem", borderTop: "1px solid #e5e5e5", display: "flex", gap: "0.625rem", justifyContent: "flex-end" }}>
-                            <button onClick={() => setEditModal(m => ({ ...m, open: false }))} disabled={editModal.loading}
+                            <button onClick={() => setEditModal(m => ({ ...m, open: false }))}
+                                disabled={editModal.loading}
                                 style={{ padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid #e5e5e5", background: "white", fontSize: "0.875rem", color: "#0a0a0a", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
                                 Cancel
                             </button>

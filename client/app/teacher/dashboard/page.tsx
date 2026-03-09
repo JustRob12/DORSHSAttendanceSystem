@@ -1,119 +1,146 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { StatCard } from "@/components/ui/stat-card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-interface UserSession {
-    id: number;
-    username: string;
-    role: string;
-    teacherId?: number;
+interface DashboardStats {
+    subjects: number;
+    students: number;
+    scans: number;
 }
 
 export default function TeacherDashboard() {
-    const router = useRouter();
-    const [user, setUser] = useState<UserSession | null>(null);
+    const [stats, setStats] = useState<DashboardStats>({ subjects: 0, students: 0, scans: 0 });
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const raw = sessionStorage.getItem("user");
-        if (!raw) { router.push("/login"); return; }
-        const parsed = JSON.parse(raw);
-        if (parsed.role !== "teacher") { router.push("/login"); return; }
-        setUser(parsed);
-    }, [router]);
+        const fetchDashboardStats = async () => {
+            try {
+                const userObj = sessionStorage.getItem("user");
+                if (!userObj) return;
+                const { teacherId } = JSON.parse(userObj);
 
-    const handleLogout = () => {
-        sessionStorage.removeItem("user");
-        router.push("/login");
-    };
+                // 1. Get assigned subject count
+                const { data: assignedSubj, error: subErr } = await supabase
+                    .from("assigned_subject")
+                    .select("subject_id")
+                    .eq("teacher_id", teacherId);
 
-    if (!user) return null;
+                if (subErr || !assignedSubj) throw subErr;
 
-    const stats = [
-        { label: "My Classes", value: "—", icon: "📚", },
-        { label: "Present Today", value: "—", icon: "✅" },
-        { label: "Absent Today", value: "—", icon: "❌" },
-        { label: "Late Today", value: "—", icon: "⏰" },
-    ];
+                const subjectIds = assignedSubj.map(s => s.subject_id);
+
+                // 2. Count distinct students involved in these subjects
+                let studentCount = 0;
+                let scanCount = 0;
+
+                if (subjectIds.length > 0) {
+                    const { count: sCount } = await supabase
+                        .from("enrolled_students")
+                        .select("*", { count: "exact", head: true })
+                        .in("subject_id", subjectIds);
+                    studentCount = sCount || 0;
+
+                    // 3. Count total scans taken today for these subjects
+                    const today = new Date().toISOString().split('T')[0];
+                    const { count: aCount } = await supabase
+                        .from("attendance")
+                        .select("*", { count: "exact", head: true })
+                        .in("subject_id", subjectIds)
+                        .eq("date", today);
+                    scanCount = aCount || 0;
+                }
+
+                setStats({
+                    subjects: subjectIds.length,
+                    students: studentCount,
+                    scans: scanCount,
+                });
+            } catch (err) {
+                console.error("Error fetching dashboard stats:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchDashboardStats();
+    }, []);
 
     return (
-        <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: "Inter, sans-serif" }}>
-            {/* Header */}
-            <header style={{
-                background: "#ffffff", borderBottom: "1px solid #e5e5e5",
-                padding: "0 2rem", height: "60px",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-            }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <Image src="/images/logo/DORSHS.png" alt="DORSHS Logo" width={32} height={32} style={{ borderRadius: "6px" }} />
-                    <span style={{ fontWeight: 600, color: "#0a0a0a", fontSize: "0.9375rem" }}>SciTrack</span>
-                    <span style={{
-                        fontSize: "0.6875rem", fontWeight: 500, color: "#2563eb",
-                        background: "#dbeafe", padding: "2px 8px", borderRadius: "20px",
-                    }}>Teacher</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                    <span style={{ fontSize: "0.875rem", color: "#737373" }}>{user.username}</span>
-                    <button onClick={handleLogout} style={{
-                        padding: "0.375rem 0.875rem", borderRadius: "6px",
-                        border: "1px solid #e5e5e5", background: "white",
-                        fontSize: "0.8125rem", color: "#0a0a0a", cursor: "pointer",
-                    }}>Sign out</button>
-                </div>
-            </header>
+        <div className="p-4 md:p-8" style={{ maxWidth: "1200px", margin: "0 auto", fontFamily: "Inter, sans-serif" }}>
+            <div style={{ marginBottom: "2rem" }}>
+                <h1 style={{ fontSize: "1.875rem", fontWeight: 700, color: "#0a0a0a", letterSpacing: "-0.03em" }}>Welcome back, Teacher!</h1>
+                <p style={{ fontSize: "0.9375rem", color: "#737373", marginTop: "0.25rem" }}>Here&apos;s a quick overview of your assigned subjects and recent attendance.</p>
+            </div>
 
-            <main style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
-                <div style={{ marginBottom: "2rem" }}>
-                    <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0a0a0a", letterSpacing: "-0.02em" }}>
-                        Teacher Dashboard
-                    </h1>
-                    <p style={{ fontSize: "0.875rem", color: "#737373", marginTop: "4px" }}>
-                        Welcome back, <strong>{user.username}</strong>. Manage your classes and attendance below.
-                    </p>
-                </div>
+            {/* Stats Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem", marginBottom: "2rem" }}>
+                <StatCard
+                    title="Assigned Subjects"
+                    value={isLoading ? "..." : stats.subjects}
+                    description="Total classes you handle"
+                    accent="#10b981"
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 6 4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" /></svg>}
+                />
+                <StatCard
+                    title="Total Students"
+                    value={isLoading ? "..." : stats.students}
+                    description="Across all your subjects"
+                    accent="#6366f1"
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="17" y1="11" x2="23" y2="11" /></svg>}
+                />
+                <StatCard
+                    title="Scans Today"
+                    value={isLoading ? "..." : stats.scans}
+                    description="Attendance logs marked today"
+                    accent="#f59e0b"
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="1" /></svg>}
+                />
+            </div>
 
-                {/* Stat cards */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-                    {stats.map((s, i) => (
-                        <div key={i} style={{
-                            background: "white", border: "1px solid #e5e5e5",
-                            borderRadius: "12px", padding: "1.25rem",
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                        }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                                <div>
-                                    <p style={{ fontSize: "0.75rem", color: "#737373", fontWeight: 500 }}>{s.label}</p>
-                                    <p style={{ fontSize: "1.75rem", fontWeight: 700, color: "#0a0a0a", marginTop: "4px" }}>{s.value}</p>
+            {/* Quick Actions / Schedule Preview */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Attendance Actions</CardTitle>
+                    <CardDescription>Shortcut to start scanning barcodes or view logs</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Link href="/teacher/scan-attendance" style={{ textDecoration: "none" }}>
+                            <div style={{
+                                border: "1px solid #e5e5e5", borderRadius: "8px", padding: "1.25rem", cursor: "pointer", transition: "all 0.15s ease",
+                                display: "flex", flexDirection: "column", gap: "0.5rem"
+                            }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.backgroundColor = "#f8fafc"; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e5e5"; e.currentTarget.style.backgroundColor = "transparent"; }}>
+                                <div style={{ fontSize: "1.5rem", width: "40px", height: "40px", background: "#f1f5f9", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="1" /></svg>
                                 </div>
-                                <span style={{ fontSize: "1.5rem" }}>{s.icon}</span>
+                                <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "#0a0a0a", margin: 0 }}>Start Scanning</h3>
+                                <p style={{ fontSize: "0.8125rem", color: "#737373", margin: 0, lineHeight: 1.4 }}>Open the camera tool to scan student barcodes.</p>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        </Link>
 
-                {/* Quick links */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
-                    {[
-                        { title: "Take Attendance", desc: "Mark today's attendance for your class", icon: "📋" },
-                        { title: "My Students", desc: "View your assigned students", icon: "🎓" },
-                        { title: "Attendance History", desc: "Review past attendance records", icon: "🗂️" },
-                        { title: "Reports", desc: "Generate class attendance reports", icon: "📊" },
-                    ].map((item, i) => (
-                        <div key={i} style={{
-                            background: "white", border: "1px solid #e5e5e5",
-                            borderRadius: "12px", padding: "1.25rem", cursor: "pointer",
-                            transition: "box-shadow 0.15s ease",
-                        }}
-                            onMouseEnter={e => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)")}
-                            onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}>
-                            <div style={{ fontSize: "1.5rem", marginBottom: "0.625rem" }}>{item.icon}</div>
-                            <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#0a0a0a" }}>{item.title}</p>
-                            <p style={{ fontSize: "0.8125rem", color: "#737373", marginTop: "3px" }}>{item.desc}</p>
-                        </div>
-                    ))}
-                </div>
-            </main>
+                        <Link href="/teacher/attendance/records" style={{ textDecoration: "none" }}>
+                            <div style={{
+                                border: "1px solid #e5e5e5", borderRadius: "8px", padding: "1.25rem", cursor: "pointer", transition: "all 0.15s ease",
+                                display: "flex", flexDirection: "column", gap: "0.5rem"
+                            }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.backgroundColor = "#f8fafc"; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e5e5"; e.currentTarget.style.backgroundColor = "transparent"; }}>
+                                <div style={{ fontSize: "1.5rem", width: "40px", height: "40px", background: "#f1f5f9", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                                </div>
+                                <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "#0a0a0a", margin: 0 }}>View Records</h3>
+                                <p style={{ fontSize: "0.8125rem", color: "#737373", margin: 0, lineHeight: 1.4 }}>Browse full attendance history and export to Excel.</p>
+                            </div>
+                        </Link>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     );
 }

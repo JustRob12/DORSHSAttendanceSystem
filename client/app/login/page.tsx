@@ -36,15 +36,14 @@ export default function LoginPage() {
         return;
       }
 
-      // 2. Try teacher
+      // 2. Try teacher — fetch by username, decrypt stored password, compare
       const { data: teacher } = await supabase
         .from("account_teacher")
-        .select("teacher_account_id, username, role, teacher_id")
+        .select("teacher_account_id, username, role, teacher_id, password")
         .eq("username", username)
-        .eq("password", password)
         .single();
 
-      if (teacher) {
+      if (teacher && decryptPassword(teacher.password) === password) {
         sessionStorage.setItem("user", JSON.stringify({ id: teacher.teacher_account_id, username: teacher.username, role: teacher.role ?? "teacher", teacherId: teacher.teacher_id }));
         router.push("/teacher/dashboard");
         return;
