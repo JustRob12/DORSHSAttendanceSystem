@@ -94,64 +94,77 @@ export default function TeacherMySubjectsPage() {
                     <p style={{ fontSize: "0.875rem", color: "#737373" }}>You currently don't have any classes assigned to you.</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {assignedSubjects.map(sub => {
-                        const sortedDates = [...(sub.subject_dates || [])].sort((a, b) => {
-                            const o = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-                            return o.indexOf(a.day) - o.indexOf(b.day);
-                        });
+                <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
+                    {Array.from(new Set(assignedSubjects.map(s => s.grade)))
+                        .sort((a, b) => b - a)
+                        .map(grade => {
+                            const gradeSubjects = assignedSubjects.filter(s => s.grade === grade);
+                            return (
+                                <div key={grade}>
+                                    <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0a0a0a", marginBottom: "1rem", paddingBottom: "0.5rem", borderBottom: "1px solid #f0f0f0" }}>
+                                        Grade {grade}
+                                    </h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {gradeSubjects.map(sub => {
+                                            const sortedDates = [...(sub.subject_dates || [])].sort((a, b) => {
+                                                const o = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+                                                return o.indexOf(a.day) - o.indexOf(b.day);
+                                            });
 
-                        return (
-                            <Link href={`/teacher/my-subjects/${sub.subject_id}`} key={sub.subject_id} style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column" }}>
-                                <div style={{
-                                    background: "white", borderRadius: "16px", overflow: "hidden",
-                                    border: `1px solid #e5e5e5`,
-                                    boxShadow: "0 4px 20px -5px rgba(0,0,0,0.05)",
-                                    display: "flex", flexDirection: "column", flexGrow: 1,
-                                    transition: "transform 0.2s, box-shadow 0.2s",
-                                }}
-                                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 25px -5px rgba(0,0,0,0.1)"; }}
-                                    onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 20px -5px rgba(0,0,0,0.05)"; }}
-                                >
-                                    <div style={{ padding: "1.5rem", borderBottom: "1px solid #f5f5f5", position: "relative", overflow: "hidden" }}>
-                                        {/* background decoration */}
-                                        <div style={{ position: "absolute", top: "-20px", right: "-20px", width: "100px", height: "100px", background: "#f0fdf4", borderRadius: "50%", opacity: 0.5, zIndex: 0 }}></div>
+                                            return (
+                                                <Link href={`/teacher/my-subjects/${sub.subject_id}`} key={sub.subject_id} style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column" }}>
+                                                    <div style={{
+                                                        background: "white", borderRadius: "16px", overflow: "hidden",
+                                                        border: `1px solid #e5e5e5`,
+                                                        boxShadow: "0 4px 20px -5px rgba(0,0,0,0.05)",
+                                                        display: "flex", flexDirection: "column", flexGrow: 1,
+                                                        transition: "transform 0.2s, box-shadow 0.2s",
+                                                    }}
+                                                        onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 25px -5px rgba(0,0,0,0.1)"; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 20px -5px rgba(0,0,0,0.05)"; }}
+                                                    >
+                                                        <div style={{ padding: "1.5rem", borderBottom: "1px solid #f5f5f5", position: "relative", overflow: "hidden" }}>
+                                                            <div style={{ position: "absolute", top: "-20px", right: "-20px", width: "100px", height: "100px", background: "#f0fdf4", borderRadius: "50%", opacity: 0.5, zIndex: 0 }}></div>
 
-                                        <div style={{ position: "relative", zIndex: 1 }}>
-                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                                                <h3 style={{ fontSize: "1.125rem", fontWeight: 700, color: "#0a0a0a" }}>{sub.subject_name}</h3>
-                                                <span style={{ fontSize: "0.75rem", fontWeight: 600, padding: "3px 8px", borderRadius: "20px", background: "#f3f4f6", color: "#525252" }}>
-                                                    Grade {sub.grade}
-                                                </span>
-                                            </div>
-                                            <p style={{ fontSize: "0.875rem", color: "#737373", lineHeight: 1.5, minHeight: "2.5rem", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                                                {sub.subject_description || "No description provided."}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ padding: "1.25rem 1.5rem", background: "#fafafa", flexGrow: 1 }}>
-                                        <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "#a3a3a3", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.75rem" }}>Schedule Overview</p>
-                                        {sortedDates.length === 0 ? (
-                                            <p style={{ fontSize: "0.8125rem", color: "#a3a3a3", fontStyle: "italic" }}>No schedule assigned</p>
-                                        ) : (
-                                            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                                                {sortedDates.map((d, i) => {
-                                                    const col = DAY_COLORS[d.day] || { bg: "#f5f5f5", border: "#e5e5e5", text: "#737373" };
-                                                    return (
-                                                        <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "0.5rem 0.75rem", borderRadius: "8px", border: `1px solid ${col.border}` }}>
-                                                            <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: col.text }}>{d.day}</span>
-                                                            <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "#525252" }}>{fmt12h(d.start_time)} – {fmt12h(d.end_time)}</span>
+                                                            <div style={{ position: "relative", zIndex: 1 }}>
+                                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
+                                                                    <h3 style={{ fontSize: "1.125rem", fontWeight: 700, color: "#0a0a0a" }}>{sub.subject_name}</h3>
+                                                                    <span style={{ fontSize: "0.75rem", fontWeight: 600, padding: "3px 8px", borderRadius: "20px", background: "#f3f4f6", color: "#525252" }}>
+                                                                        Grade {sub.grade}
+                                                                    </span>
+                                                                </div>
+                                                                <p style={{ fontSize: "0.875rem", color: "#737373", lineHeight: 1.5, minHeight: "2.5rem", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                                                                    {sub.subject_description || "No description provided."}
+                                                                </p>
+                                                            </div>
                                                         </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
+
+                                                        <div style={{ padding: "1.25rem 1.5rem", background: "#fafafa", flexGrow: 1 }}>
+                                                            <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "#a3a3a3", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.75rem" }}>Schedule Overview</p>
+                                                            {sortedDates.length === 0 ? (
+                                                                <p style={{ fontSize: "0.8125rem", color: "#a3a3a3", fontStyle: "italic" }}>No schedule assigned</p>
+                                                            ) : (
+                                                                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                                                                    {sortedDates.map((d, i) => {
+                                                                        const col = DAY_COLORS[d.day] || { bg: "#f5f5f5", border: "#e5e5e5", text: "#737373" };
+                                                                        return (
+                                                                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "0.5rem 0.75rem", borderRadius: "8px", border: `1px solid ${col.border}` }}>
+                                                                                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: col.text }}>{d.day}</span>
+                                                                                <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "#525252" }}>{fmt12h(d.start_time)} – {fmt12h(d.end_time)}</span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </Link>
+                                            );
+                                        })}
                                     </div>
                                 </div>
-                            </Link>
-                        );
-                    })}
+                            );
+                        })}
                 </div>
             )}
         </div>

@@ -12,8 +12,16 @@ interface DashboardStats {
     scans: number;
 }
 
+interface AssignedSubjectItem {
+    subject_id: number;
+    subject_name: string;
+    grade: number;
+    student_count: number;
+}
+
 export default function TeacherDashboard() {
     const [stats, setStats] = useState<DashboardStats>({ subjects: 0, students: 0, scans: 0 });
+    const [subjectsList, setSubjectsList] = useState<AssignedSubjectItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -23,26 +31,40 @@ export default function TeacherDashboard() {
                 if (!userObj) return;
                 const { teacherId } = JSON.parse(userObj);
 
-                // 1. Get assigned subject count
+                // 1. Get assigned subject count and details
                 const { data: assignedSubj, error: subErr } = await supabase
                     .from("assigned_subject")
-                    .select("subject_id")
+                    .select("subject_id, subject:subject_id(subject_name, grade)")
                     .eq("teacher_id", teacherId);
 
                 if (subErr || !assignedSubj) throw subErr;
 
-                const subjectIds = assignedSubj.map(s => s.subject_id);
+                const loadedSubjects: AssignedSubjectItem[] = assignedSubj.map(s => ({
+                    subject_id: s.subject_id,
+                    subject_name: (s.subject as any)?.subject_name || "Unknown",
+                    grade: (s.subject as any)?.grade || 0,
+                    student_count: 0
+                }));
+
+                const subjectIds = loadedSubjects.map(s => s.subject_id);
 
                 // 2. Count distinct students involved in these subjects
                 let studentCount = 0;
                 let scanCount = 0;
 
                 if (subjectIds.length > 0) {
-                    const { count: sCount } = await supabase
-                        .from("enrolled_students")
-                        .select("*", { count: "exact", head: true })
+                    const { data: studentsData } = await supabase
+                        .from("student_on_subject")
+                        .select("subject_id")
                         .in("subject_id", subjectIds);
-                    studentCount = sCount || 0;
+
+                    if (studentsData) {
+                        studentCount = studentsData.length;
+                        studentsData.forEach(st => {
+                            const subj = loadedSubjects.find(s => s.subject_id === st.subject_id);
+                            if (subj) subj.student_count++;
+                        });
+                    }
 
                     // 3. Count total scans taken today for these subjects
                     const today = new Date().toISOString().split('T')[0];
@@ -59,6 +81,7 @@ export default function TeacherDashboard() {
                     students: studentCount,
                     scans: scanCount,
                 });
+                setSubjectsList(loadedSubjects);
             } catch (err) {
                 console.error("Error fetching dashboard stats:", err);
             } finally {
@@ -100,6 +123,50 @@ export default function TeacherDashboard() {
                     icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><rect x="7" y="7" width="10" height="10" rx="1" /></svg>}
                 />
             </div>
+
+            {/* Assigned Subjects List */}
+            <Card style={{ marginBottom: "2rem" }}>
+                <CardHeader>
+                    <CardTitle>My Subjects</CardTitle>
+                    <CardDescription>Classes you are currently handling and their enrolled students</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? (
+                        <p style={{ color: "#737373", fontSize: "0.875rem" }}>Loading subjects...</p>
+                    ) : subjectsList.length === 0 ? (
+                        <p style={{ color: "#737373", fontSize: "0.875rem" }}>No subjects assigned.</p>
+                    ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+                            {Array.from(new Set(subjectsList.map(s => s.grade)))
+                                .sort((a, b) => b - a)
+                                .map(grade => {
+                                    const gradeSubjects = subjectsList.filter(s => s.grade === grade);
+                                    return (
+                                        <div key={grade}>
+                                            <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0a0a0a", marginBottom: "1rem", paddingBottom: "0.5rem", borderBottom: "1px solid #f0f0f0" }}>
+                                                Grade {grade}
+                                            </h3>
+                                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "1rem" }}>
+                                                {gradeSubjects.map(subj => (
+                                                    <div key={subj.subject_id} style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "1.5rem", borderRadius: "12px", border: "1px solid #e5e5e5", background: "#fff", aspectRatio: "1 / 1", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
+                                                        <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem", overflow: "hidden" }}>
+                                                            <h4 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 600, color: "#0a0a0a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={subj.subject_name}>{subj.subject_name}</h4>
+                                                            <span style={{ fontSize: "0.875rem", color: "#737373" }}>Grade {subj.grade}</span>
+                                                        </div>
+                                                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", marginTop: "auto" }}>
+                                                            <span style={{ fontSize: "4rem", fontWeight: 800, lineHeight: 1, color: "#0a0a0a", letterSpacing: "-0.05em" }}>{subj.student_count}</span>
+                                                            <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "#737373", marginTop: "0.25rem" }}>Students</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
 
             {/* Quick Actions / Schedule Preview */}
             <Card>

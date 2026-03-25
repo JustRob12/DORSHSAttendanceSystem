@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import * as XLSX from "xlsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SubjectDate {
@@ -62,6 +63,8 @@ export default function TeacherScanAttendancePage() {
     const isProcessingRef = useRef(false); // prevents concurrent scan callbacks
     const [scanning, setScanning] = useState(false);
     const [cameraError, setCameraError] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Scan result modal
     const [modal, setModal] = useState<{
@@ -261,6 +264,8 @@ export default function TeacherScanAttendancePage() {
                     lrn: payload.lrn,
                     grade: payload.grade ?? null,
                     section: payload.section ?? null,
+                    status: "1", // Defaults to present for live scans
+                    remarks: "Scanned",
                 })
                 .select("attendance_id")
                 .single();
@@ -286,6 +291,127 @@ export default function TeacherScanAttendancePage() {
             status,
             reason,
         }, ...prev]);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !activeSubject) return;
+
+        setIsUploading(true);
+        try {
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data, { type: "array" });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const rows: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+
+
+            for (const row of rows) {
+                const rawName = row.StudentName || "";
+                const lrnRaw = row.LRN?.toString().trim();
+                const grade = row.Grade?.toString() || null;
+                const section = row.Section?.toString() || null;
+                const attendanceStatus = row.Attendance?.toString().trim();
+
+                if (!lrnRaw || !["0", "1", "2"].includes(attendanceStatus || "")) {
+                    // Skip empty rows or those with invalid attendance (Must be 0, 1, or 2)
+                    continue;
+                }
+
+                // Format Name (Last, First -> First Last) for the payload logging
+                let formattedName = rawName;
+                if (rawName.includes(",")) {
+                    const [last, first] = rawName.split(",").map((s: string) => s.trim());
+                    formattedName = `${first} ${last}`;
+                }
+
+                const payload = {
+                    lrn: lrnRaw,
+                    name: formattedName,
+                    grade,
+                    section,
+                    profilePicture: null
+                };
+
+                // Check Enrollment (does it belong to the class?)
+                const { data: stuRow } = await supabase
+                    .from("students")
+                    .select("student_id")
+                    .eq("lrn", lrnRaw)
+                    .single();
+
+                if (!stuRow) {
+                    logScan(payload, "rejected", "Student not found.");
+                    continue;
+                }
+
+                const { data: accRow } = await supabase
+                    .from("account_students")
+                    .select("student_account_id")
+                    .eq("student_id", stuRow.student_id)
+                    .single();
+
+                if (!accRow) {
+                    logScan(payload, "rejected", "No account.");
+                    continue;
+                }
+
+                const { data: enrolled } = await supabase
+                    .from("student_on_subject")
+                    .select("id")
+                    .eq("student_account_id", accRow.student_account_id)
+                    .eq("subject_id", activeSubject.subject_id)
+                    .maybeSingle();
+
+                if (!enrolled) {
+                    logScan(payload, "rejected", "Not enrolled in class.");
+                    continue;
+                }
+
+                // Check Duplicates
+                const { data: existingRows } = await supabase
+                    .from("attendance")
+                    .select("attendance_id, timein")
+                    .eq("lrn", lrnRaw)
+                    .eq("subject_id", activeSubject.subject_id)
+                    .gte("timein", todayStart.toISOString())
+                    .limit(1);
+
+                if (existingRows && existingRows.length > 0) {
+                    const scannedAt = new Date(existingRows[0].timein + "Z").toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+                    logScan(payload, "rejected", `Already scanned at ${scannedAt}.`);
+                    continue;
+                }
+
+                // Insert into attendance
+                const { error: insErr } = await supabase
+                    .from("attendance")
+                    .insert({
+                        subject_id: activeSubject.subject_id,
+                        student_name: formattedName,
+                        lrn: lrnRaw,
+                        grade,
+                        section,
+                        remarks: "Offline Record", // Add the remarks
+                        status: attendanceStatus, // Add the parsed status
+                    });
+
+                if (insErr) {
+                    logScan(payload, "rejected", "Failed to save record.");
+                } else {
+                    logScan(payload, "success", "Offline Record added.");
+                }
+            }
+        } catch (err) {
+            console.error("Failed to parse Excel file", err);
+            alert("Failed to read the Excel file. Please ensure it is correctly formatted.");
+        } finally {
+            setIsUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
     };
 
     const closeModal = async () => {
@@ -449,6 +575,35 @@ export default function TeacherScanAttendancePage() {
                             Start Camera
                         </button>
                     )}
+
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", width: "100%", marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #e5e5e5" }}>
+                        <p style={{ fontSize: "0.75rem", color: "#a3a3a3", margin: 0 }}>Or upload an offline attendance record</p>
+                        <input
+                            type="file"
+                            accept=".xlsx, .xls"
+                            ref={fileInputRef}
+                            style={{ display: "none" }}
+                            onChange={handleFileUpload}
+                        />
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading || scanning}
+                            style={{
+                                background: "white", color: "#0f766e", border: "1px solid #0f766e",
+                                padding: "0.625rem 1.5rem", borderRadius: "10px", fontSize: "0.875rem",
+                                fontWeight: 600, cursor: (isUploading || scanning) ? "not-allowed" : "pointer", display: "flex",
+                                alignItems: "center", gap: "0.5rem", width: "fit-content",
+                                opacity: (isUploading || scanning) ? 0.6 : 1
+                            }}
+                        >
+                            {isUploading ? (
+                                <div style={{ width: "16px", height: "16px", border: "2px solid #0f766e", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                            )}
+                            {isUploading ? "Uploading..." : "Upload Offline Excel"}
+                        </button>
+                    </div>
 
                     <p style={{ fontSize: "0.75rem", color: "#a3a3a3" }}>Point the camera at the student&apos;s QR code card.</p>
                 </div>

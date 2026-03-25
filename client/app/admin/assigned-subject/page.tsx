@@ -599,60 +599,82 @@ export default function AssignedSubjectPage() {
                             </div>
                         )}
 
-                        <div className="overflow-y-auto p-5 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                            {/* Left: Details */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Subject Name *</label>
-                                    <input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} />
+                        <div style={{ overflowY: "auto", padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                            {/* Subject Details */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                                    <div style={{ flex: "1 1 200px" }}>
+                                        <label style={{ display: "block", fontSize: "0.875rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.5rem" }}>Subject Name <span style={{ color: "#dc2626" }}>*</span></label>
+                                        <input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} placeholder="e.g. Mathematics" />
+                                    </div>
+                                    <div style={{ flex: "1 1 200px" }}>
+                                        <label style={{ display: "block", fontSize: "0.875rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.5rem" }}>Grade <span style={{ color: "#dc2626" }}>*</span></label>
+                                        <select value={editGrade} onChange={e => setEditGrade(e.target.value)} style={inputStyle}>
+                                            {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
                                 <div>
-                                    <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Grade *</label>
-                                    <select value={editGrade} onChange={e => setEditGrade(e.target.value)} style={inputStyle}>
-                                        {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Description</label>
-                                    <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+                                    <label style={{ display: "block", fontSize: "0.875rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.5rem" }}>Description</label>
+                                    <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={3} style={{ ...inputStyle, resize: "vertical" }} placeholder="Optional subject description..." />
                                 </div>
                             </div>
 
-                            {/* Right: Schedule */}
+                            <hr style={{ border: "none", borderTop: "1px solid #e5e5e5", margin: "0" }} />
+
+                            {/* Schedule Section */}
                             <div>
-                                <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "#0a0a0a", marginBottom: "0.375rem" }}>Weekly Schedule</label>
-                                <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                                <div style={{ marginBottom: "1rem" }}>
+                                    <label style={{ display: "block", fontSize: "0.9375rem", fontWeight: 600, color: "#0a0a0a", marginBottom: "0.25rem" }}>Weekly Schedule</label>
+                                    <p style={{ fontSize: "0.8125rem", color: "#737373", margin: 0 }}>Add days and set the time slots. <span className="hidden sm:inline">You can add multiple days.</span></p>
+                                </div>
+
+                                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
                                     {DAYS.map(day => {
                                         const taken = selectedDays.has(day);
                                         const col = DAY_COLORS[day];
                                         return (
                                             <button key={day} onClick={() => addEditScheduleRow(day)} disabled={taken}
                                                 style={{
-                                                    padding: "0.25rem 0.625rem", borderRadius: "20px", fontSize: "0.75rem", fontWeight: 500,
+                                                    padding: "0.375rem 0.875rem", borderRadius: "9999px", fontSize: "0.8125rem", fontWeight: 500,
                                                     border: `1px solid ${taken ? "#e5e5e5" : col.border}`,
                                                     background: taken ? "#f5f5f5" : col.bg,
                                                     color: taken ? "#a3a3a3" : col.text,
-                                                    cursor: taken ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: "0.25rem"
+                                                    cursor: taken ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: "0.375rem",
+                                                    transition: "all 0.15s"
                                                 }}>
                                                 {!taken && <PlusIcon />} {day.slice(0, 3)}
                                             </button>
                                         );
                                     })}
                                 </div>
+
                                 {editSchedules.length === 0 ? (
-                                    <div style={{ padding: "1.5rem", textAlign: "center", background: "#f9fafb", borderRadius: "8px", border: "1px dashed #e5e5e5", fontSize: "0.8125rem", color: "#a3a3a3" }}>
-                                        No schedule added. Add a day above.
+                                    <div style={{ padding: "2rem", textAlign: "center", background: "#f9fafb", borderRadius: "12px", border: "1px dashed #d4d4d4", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                                        <p style={{ fontSize: "0.875rem", color: "#737373", margin: 0 }}>No schedule days added yet.<br className="sm:hidden" /> Click a day above to start.</p>
                                     </div>
                                 ) : (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                                         {editSchedules.map((s, i) => {
                                             const col = DAY_COLORS[s.day];
                                             return (
-                                                <div key={s.day} style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 28px", gap: "0.5rem", alignItems: "center", background: col.bg, border: `1px solid ${col.border}`, borderRadius: "8px", padding: "0.5rem 0.75rem" }}>
-                                                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: col.text }}>{s.day.slice(0, 3)}</span>
-                                                    <input type="time" value={s.startTime} onChange={e => updateEditSchedule(i, "startTime", e.target.value)} style={{ ...inputStyle, padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} />
-                                                    <input type="time" value={s.endTime} onChange={e => updateEditSchedule(i, "endTime", e.target.value)} style={{ ...inputStyle, padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} />
-                                                    <button onClick={() => removeEditScheduleRow(i)} style={{ background: "none", border: "none", color: col.text, cursor: "pointer", opacity: 0.7, display: "flex" }}><TrashIcon /></button>
+                                                <div key={s.day} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", background: "white", border: `1px solid #e5e5e5`, borderLeft: `4px solid ${col.border}`, borderRadius: "10px", padding: "0.75rem 1rem", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+                                                    <span style={{ fontSize: "0.875rem", fontWeight: 600, color: col.text, minWidth: "40px" }}>{s.day.slice(0, 3)}</span>
+                                                    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", flexGrow: 1 }}>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flex: "1 1 110px", minWidth: 0 }}>
+                                                            <span style={{ fontSize: "0.75rem", color: "#737373", display: "none" }} className="sm:inline">Start</span>
+                                                            <input type="time" value={s.startTime} onChange={e => updateEditSchedule(i, "startTime", e.target.value)} style={{ ...inputStyle, padding: "0.375rem 0.625rem", minWidth: 0 }} />
+                                                        </div>
+                                                        <span style={{ color: "#a3a3a3", fontSize: "0.8125rem" }}>to</span>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flex: "1 1 110px", minWidth: 0 }}>
+                                                            <span style={{ fontSize: "0.75rem", color: "#737373", display: "none" }} className="sm:inline">End</span>
+                                                            <input type="time" value={s.endTime} onChange={e => updateEditSchedule(i, "endTime", e.target.value)} style={{ ...inputStyle, padding: "0.375rem 0.625rem", minWidth: 0 }} />
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => removeEditScheduleRow(i)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "32px", height: "32px", borderRadius: "8px", background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", cursor: "pointer", marginLeft: "auto" }} title="Remove day">
+                                                        <TrashIcon />
+                                                    </button>
                                                 </div>
                                             );
                                         })}
